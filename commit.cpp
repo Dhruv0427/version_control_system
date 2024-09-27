@@ -33,7 +33,6 @@ void commit(const std::string& message){
 
     std::cout<<"commited: "<<version_name<<std::endl;
 
-        // Write the commit message to the metadata file
     if (!message.empty()) {
             metadata << version_name << " - Message: " << message << std::endl;
             std::cout << " - Message: " << message;
