@@ -5,7 +5,7 @@
 void init(){
 if(!std::filesystem::exists(".vcs")) {
     std::filesystem::create_directory(".vcs");
-    std::filesystem::create_directory(".vcs/objects/");
+    std::filesystem::create_directory(".vcs/commits");
     std::filesystem::create_directory(".vcs/staging");
     
     std::cout << "Directory structure '.vcs' created in the directory: " 
