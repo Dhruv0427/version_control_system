@@ -61,6 +61,17 @@ int main(int argc, char* argv[]) {
     else if (command == "log") {
         log();
     }
+
+    else if (command == "restore"){
+        if (argc < 3) {
+            std::cout << "----------------------------------------" << std::endl;
+            std::cout << "Please enter a correct filename." << std::endl;
+            std::cout << "----------------------------------------" << std::endl;
+            return 1;
+        }
+        std::string filename = argv[2];
+        restore_file(filename);
+    }
     else {
         std::cout << "----------------------------------------" << std::endl;
         std::cout << "Invalid command." << std::endl;
