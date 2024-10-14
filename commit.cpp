@@ -1,4 +1,5 @@
 #include <filesystem>
+#include <openssl/sha.h>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -16,11 +17,13 @@ const std::string HEAD_FILE = ".vcs/HEAD";
 const std::string BRANCHES_DIR = ".vcs/branches";
 
 std::string calculate_sha1_hash(const std::string& input) {
-    std::hash<std::string> hasher;
-    size_t hash = hasher(input);
-    
+    unsigned char hash[SHA_DIGEST_LENGTH];
+    SHA1(reinterpret_cast<const unsigned char*>(input.c_str()), input.size(), hash);
+
     std::stringstream hash_string;
-    hash_string << std::hex << std::setw(16) << std::setfill('0') << hash;
+    for (int i = 0; i < SHA_DIGEST_LENGTH; ++i) {
+        hash_string << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(hash[i]);
+    }
     return hash_string.str();
 }
 
