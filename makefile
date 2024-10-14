@@ -8,7 +8,7 @@ CXXFLAGS = -std=c++17 -Wall
 TARGET = myvcs
 
 # Source files
-SRCS = main.cpp add.cpp init.cpp commit.cpp log.cpp restore.cpp
+SRCS = main.cpp add.cpp init.cpp commit.cpp log.cpp restore.cpp branch.cpp
 
 # Object files
 OBJS = $(SRCS:.cpp=.o)
