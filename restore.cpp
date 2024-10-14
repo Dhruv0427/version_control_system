@@ -3,74 +3,129 @@
 #include <vector>
 #include <string>
 #include <fstream>
-#include "my_vcs.h"
+#include <sstream>
+#include <unordered_map>
 
 const std::string COMMITS_DIR = ".vcs/commits";
+const std::string BLOBS_DIR = ".vcs/blobs";
+const std::string TREES_DIR = ".vcs/trees";
 
-std::pair<std::string, std::string> split_versioned_filename(const std::string& versioned_file) {
-    size_t underscore_pos = versioned_file.find('_');
-    std::string file_hash = versioned_file.substr(0, underscore_pos);
-    std::string filename = versioned_file.substr(underscore_pos + 1);
-    return {file_hash, filename};
+// Function to list all versions of a specific file
+std::unordered_map<std::string, std::string> list_file_versions(const std::string& filename) {
+    std::unordered_map<std::string, std::string> versions; // maps commit hash to blob hash
+    std::ifstream metadata_file(COMMITS_DIR + "/metadata.txt");
+
+    // Check if the metadata file opened successfully
+    if (!metadata_file) {
+        std::cerr << "Error: Unable to open metadata file." << std::endl;
+        return versions; // Return empty map on error
+    }
+
+    std::string line;
+    while (std::getline(metadata_file, line)) {
+        std::istringstream iss(line);
+        std::string commit_hash, tree_hash, message;
+
+        // Extract commit hash and tree hash from the metadata
+        iss >> commit_hash; // Read the commit hash
+        iss >> message;     // Skip '-'
+        iss >> message;     // Skip 'Tree:'
+        iss >> tree_hash;   // Read the tree hash
+
+        // Construct the path to the tree file
+        std::string tree_file_path = TREES_DIR + "/" + tree_hash;
+        std::ifstream tree_file(tree_file_path);
+
+        // Check if the tree file opened successfully
+        if (!tree_file) {
+            std::cerr << "Error: Unable to open tree file: " << tree_file_path << std::endl;
+            continue; // Skip this commit if the tree file is not accessible
+        }
+
+        std::string tree_line;
+        // Read the tree file line by line
+        while (std::getline(tree_file, tree_line)) {
+            std::istringstream tree_iss(tree_line);
+            std::string blob_hash;
+
+            // Read the blob hash from the tree file
+            tree_iss >> blob_hash;
+
+            // Now go to the corresponding blob file using the blob hash
+            std::ifstream blob_file(BLOBS_DIR + "/" + blob_hash);
+            if (!blob_file) {
+                std::cerr << "Error: Unable to open blob file: " << BLOBS_DIR + "/" + blob_hash << std::endl;
+                continue;
+            }
+
+            std::string blob_line;
+            std::string blob_filename;
+            
+            // Read the blob file to extract the filename
+            if (std::getline(blob_file, blob_line)) {
+                std::istringstream blob_iss(blob_line);
+                std::string actual_blob_hash;
+                blob_iss >> actual_blob_hash;  // Extract the actual blob hash
+                blob_filename = blob_line.substr(actual_blob_hash.size() + 1);  // Extract the filename
+                
+                // If the file name matches the filename we're looking for
+                if (blob_filename == filename) {
+                    // Store the commit hash and blob hash
+                    versions[commit_hash] = actual_blob_hash; // Correctly store the actual blob hash
+                    break; // No need to continue once we find the matching file
+                }
+            }
+            blob_file.close();
+        }
+        tree_file.close();
+    }
+
+    return versions; // Return the map of versions
 }
 
-void list_file_versions(const std::string& filename) {
-    std::filesystem::path commit_dir(COMMITS_DIR);
-    std::vector<std::string> versions;
-
-    for (const auto& commit_entry : std::filesystem::directory_iterator(commit_dir)) {
-        if (!std::filesystem::is_directory(commit_entry)) continue;  // Skip non-directory entries
-        
-        for (const auto& file_entry : std::filesystem::directory_iterator(commit_entry.path())) {
-            auto [file_hash, file_name] = split_versioned_filename(file_entry.path().filename().string());
-
-            if (file_name == filename) {
-                versions.push_back(commit_entry.path().filename().string() + ": " + file_entry.path().filename().string());
-            }
-        }
+// Function to restore a file from a specific version
+void restore_file_version(const std::string& blob_hash, const std::string& filename) {
+    // Open the blob file that contains the file content
+    std::ifstream blob_file(BLOBS_DIR + "/" + blob_hash, std::ios::binary);
+    if (!blob_file) {
+        std::cerr << "Error: Unable to open blob file for hash: " << blob_hash << std::endl;
+        return;
     }
+
+    // Restore the file content
+    std::ofstream output_file(filename, std::ios::binary);
+    output_file << blob_file.rdbuf(); // Write the content of the blob to the file
+
+    std::cout << "Restored " << filename << " to version with blob hash " << blob_hash << "." << std::endl;
+
+    blob_file.close();
+    output_file.close();
+}
+
+// Function to prompt the user to restore a specific file version
+void restore_file(const std::string& filename) {
+    auto versions = list_file_versions(filename);
 
     if (versions.empty()) {
-        std::cout << "No versions found for file: " << filename << std::endl;
+        std::cerr << "No versions found for " << filename << "!" << std::endl;
         return;
     }
 
-    std::cout << "Previous versions of " << filename << ":\n";
-    for (size_t i = 0; i < versions.size(); ++i) {
-        std::cout << i + 1 << ": " << versions[i] << std::endl;
-    }
-}
-
-void restore_file_version(const std::string& filename, std::size_t version_number) { 
-    std::filesystem::path commit_dir(COMMITS_DIR);
-    std::vector<std::filesystem::path> version_paths;
-
-    for (const auto& commit_entry : std::filesystem::directory_iterator(commit_dir)) {
-        if (!std::filesystem::is_directory(commit_entry)) continue;
-
-        for (const auto& file_entry : std::filesystem::directory_iterator(commit_entry.path())) {
-            auto [file_hash, file_name] = split_versioned_filename(file_entry.path().filename().string());
-            if (file_name == filename) {
-                version_paths.push_back(file_entry.path());
-            }
-        }
+    // List all versions of the file
+    std::cout << "Available versions for " << filename << ":" << std::endl;
+    for (const auto& [commit_hash, blob_hash] : versions) {
+        std::cout << "- Commit Hash: " << commit_hash << ", Blob Hash: " << blob_hash << std::endl;
     }
 
-    if (version_number < 1 || version_number > version_paths.size()) {
-        std::cout << "Invalid version number." << std::endl;
-        return;
+    // Ask user for which version to restore
+    std::cout << "Enter the commit hash to restore: ";
+    std::string selected_commit_hash;
+    std::cin >> selected_commit_hash;
+
+    // Restore the selected version
+    if (versions.find(selected_commit_hash) != versions.end()) {
+        restore_file_version(versions[selected_commit_hash], filename); // Use the blob hash associated with the commit hash
+    } else {
+        std::cerr << "Error: Invalid commit hash selected." << std::endl;
     }
-
-    std::filesystem::copy_file(version_paths[version_number - 1], filename, std::filesystem::copy_options::overwrite_existing);
-    std::cout << "Restored " << filename << " to version: " << version_paths[version_number - 1].filename().string() << std::endl;
-}
-
-void restore_file(const std::string& filename) {
-    list_file_versions(filename);
-    
-    std::cout << "Enter the version number to restore: ";
-    int version_number;
-    std::cin >> version_number;
-    
-    restore_file_version(filename, version_number);
 }
