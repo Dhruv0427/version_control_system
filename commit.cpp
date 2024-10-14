@@ -96,7 +96,10 @@ void commit(const std::string& message) {
     std::string prev_commit;
     std::ifstream branch_file(BRANCHES_DIR + "/" + current_branch);
     if (branch_file.is_open()) {
-        std::getline(branch_file, prev_commit); 
+        std::string line;
+        while (std::getline(branch_file, line)) {
+            prev_commit = line;  
+        }
     }
 
     std::vector<std::pair<std::string, std::string>> file_entries; 
@@ -105,7 +108,7 @@ void commit(const std::string& message) {
         std::string filename = entry.path().filename().string();
         std::string blob_hash = create_blob(entry.path());
         file_entries.push_back({blob_hash, filename});
-        std::cout << "Blob created: " << blob_hash<<std::endl;
+        std::cout << "Blob created: " << blob_hash << std::endl;
     }
 
     std::string tree_hash = create_tree(file_entries);
