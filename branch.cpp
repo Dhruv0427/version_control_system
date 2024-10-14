@@ -51,9 +51,14 @@ void create_branch(const std::string& branch_name) {
     std::ifstream current_branch_file(BRANCHES_DIR + "/" + current_branch);
     std::string current_commit;
     if (current_branch_file.is_open()) {
-        std::getline(current_branch_file, current_commit);
+        std::string line;
+        while (std::getline(current_branch_file, line)) {
+            current_commit = line;
+        }
+        current_branch_file.close();
     }
-    branch_file << current_commit << std::endl; 
+
+    branch_file << current_commit << std::endl;
     branch_file.close();
 
     std::cout << "Branch '" << branch_name << "' created from commit: " << current_commit << std::endl;
@@ -64,9 +69,9 @@ void switch_branch(const std::string& branch_name) {
     std::string commit_hash;
 
     if (branch_file.is_open()) {
-        std::getline(branch_file, commit_hash);
+        std::getline(branch_file, commit_hash); 
         
-        std::ofstream head_file(HEAD_FILE);
+        std::ofstream head_file(HEAD_FILE); 
         head_file << branch_name; 
         head_file.close();
         
@@ -89,7 +94,7 @@ void delete_branch(const std::string& branch_name) {
     }
 }
 
-void handle_branch_command(const std::string& command, const std::string& branch_name) {
+void handle_branch_command(const std::string& command, const std::string& branch_name = "") {
     if (command == "create") {
         create_branch(branch_name);
     } else if (command == "switch") {
