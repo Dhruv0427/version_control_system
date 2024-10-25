@@ -1,41 +1,76 @@
 #include "delta.h"
 #include <iostream>
 #include <fstream>
-#include <vector>
-#include <string>
 #include <filesystem>
-#include <ctime>
 
-void generateUniqueDelta(const std::vector<std::string>& oldLines, const std::vector<std::string>& newLines) {
-    if(!std::filesystem::exists("delta"))
-        std::filesystem::create_directories("delta");
+namespace fs = std::filesystem;
 
-    std::time_t currentTime = std::time(nullptr);
-    std::string deltaFileName = "delta/delta_" + std::to_string(currentTime) + ".txt";
+void storeDelta(const std::string &fileName, 
+                const std::vector<std::string> &added, 
+                const std::vector<std::pair<int, std::pair<std::string, std::string>>> &modified,  
+                const std::vector<std::string> &deleted) {
+    std::string deltaFile = getNextDeltaFileName(fileName);
+    std::ofstream deltaOut(deltaFile);
 
-    std::ofstream deltaFile(deltaFileName);
-    if (!deltaFile.is_open()) {
-        std::cerr << "Error opening delta file." << std::endl;
-        return;
-    }
-
-    deltaFile << "Delta Changes:\n";
-
-    for (size_t i = 0; i < std::max(oldLines.size(), newLines.size()); ++i) {
-        if (i < oldLines.size() && i < newLines.size()) {
-            if (oldLines[i] != newLines[i]) {
-                deltaFile << "Type: modify, Position: " << (i + 1)
-                          << ", Old: \"" << oldLines[i]
-                          << "\", New: \"" << newLines[i] << "\"\n";
-            }
-        } else if (i < oldLines.size()) {
-            deltaFile << "Type: delete, Position: " << (i + 1)
-                      << ", Old: \"" << oldLines[i] << "\"\n";
-        } else {
-            deltaFile << "Type: add, Position: " << (i + 1)
-                      << ", New: \"" << newLines[i] << "\"\n";
+    if (!added.empty()) {
+        deltaOut << "Added Lines:\n";
+        for (const auto &addedLine : added) {
+            deltaOut << addedLine << "\n";
         }
     }
 
-    deltaFile.close();
+    if (!modified.empty()) {
+        deltaOut << "\nModified Lines:\n";
+        for (const auto &modifiedPair : modified) {
+            deltaOut << "Line " << modifiedPair.first << ": from \"" 
+                     << modifiedPair.second.first << "\" to \"" 
+                     << modifiedPair.second.second << "\"\n";
+        }
+    }
+
+    if (!deleted.empty()) {
+        deltaOut << "\nDeleted Lines:\n";
+        for (const auto &deletedLine : deleted) {
+            deltaOut << deletedLine << "\n";
+        }
+    }
+
+    deltaOut.close();
+    std::cout << "Delta changes saved to " << deltaFile << std::endl;
+}
+
+void displayDelta(const std::string &deltaFile) {
+    std::ifstream file(deltaFile);
+    if (!file) {
+        std::cerr << "Could not open delta file: " << deltaFile << std::endl;
+        return;
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        std::cout << line << std::endl;
+    }
+}
+
+std::string getNextDeltaFileName(const std::string &fileName) {
+    std::string baseName = fs::path(fileName).stem().string();
+    std::string deltaDir = "delta/" + baseName;
+    if (!fs::exists(deltaDir)) {
+        fs::create_directories(deltaDir);
+    }
+
+    int versionNumber = 1;
+    for (const auto &entry : fs::directory_iterator(deltaDir)) {
+        std::string deltaFile = entry.path().filename().string();
+        if (deltaFile.find("delta_") == 0) {
+            size_t pos = deltaFile.find_last_of('_');
+            size_t ext = deltaFile.find_last_of('.');
+            if (pos != std::string::npos && ext != std::string::npos) {
+                int currentVersion = std::stoi(deltaFile.substr(pos + 1, ext - pos - 1));
+                versionNumber = std::max(versionNumber, currentVersion + 1);
+            }
+        }
+    }
+
+    return deltaDir + "/delta_" + std::to_string(versionNumber) + ".txt";
 }
