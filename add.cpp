@@ -1,53 +1,39 @@
 #include <filesystem>
 #include <iostream>
 #include <fstream>
-#include <sstream>
 #include <string>
 #include "my_vcs.h"
 
 const std::string STAGING_DIR = ".vcs/staging";
-const std::string BLOBS_DIR = ".vcs/blobs";
-const std::string INDEX_FILE = STAGING_DIR + "/index.txt";  
-
-
 
 void add(const std::string& filename) {
+    // Ensure the staging directory exists
     if (!std::filesystem::exists(STAGING_DIR)) {
-        std::filesystem::create_directory(STAGING_DIR);
-    }
-    if (!std::filesystem::exists(BLOBS_DIR)) {
-        std::filesystem::create_directory(BLOBS_DIR);
+        std::filesystem::create_directories(STAGING_DIR);
     }
 
-    std::ifstream file(filename, std::ios::binary);
+    // Define the file path relative to the current directory
+    std::filesystem::path filepath = std::filesystem::current_path() / filename;
+
+    // Check if the file exists and can be opened
+    std::ifstream file(filepath, std::ios::binary);
     if (!file) {
-        std::cerr << "File " << filename << " does not exist or cannot be opened!" << std::endl;
+        std::cerr << "ERROR: " << filepath << " does not exist or cannot be opened!" << std::endl;
+        return;
+    }
+    
+    // Define the destination path in the staging area
+    std::filesystem::path destination = std::filesystem::path(STAGING_DIR) / filename;
+
+    // Check if the file already exists in the staging area
+    if (std::filesystem::exists(destination)) {
+        std::cout << "FILE: " << filename << " is already present in the staging area." << std::endl;
         return;
     }
 
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    std::string file_content = buffer.str();
+    // Copy the file to the staging directory, overwriting if it already exists
+    std::filesystem::copy_file(filepath, destination, std::filesystem::copy_options::overwrite_existing);
+    std::cout << "FILE: " << filename << " added to the staging area." << std::endl;
 
-    std::string file_hash = calculate_sha1_hash(file_content);
-    std::string blob_path = BLOBS_DIR + "/" + file_hash;
-
-    if (!std::filesystem::exists(blob_path)) {
-        std::ofstream blob_file(blob_path, std::ios::binary);
-        blob_file << file_content;
-        blob_file.close();
-        std::cout << "Blob created for file: " << filename << " with hash: " << file_hash << std::endl;
-    }
-
-    std::ofstream index_file(INDEX_FILE, std::ios::app);
-    if (!index_file) {
-        std::cerr << "Error opening index file in the staging area!" << std::endl;
-        return;
-    }
-
-    index_file << file_hash << " " << filename << std::endl;
-    std::cout << "File " << filename << " is staged with blob hash: " << file_hash << std::endl;
-
-    index_file.close();
-    file.close();
+    return;
 }
