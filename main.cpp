@@ -41,9 +41,13 @@ int main(int argc, char* argv[]) {
             std::cout << "----------------------------------------" << std::endl;
             return 1;
         }
-        std::string filename = argv[2];
-        add(filename);
+
+        for(int i=2;i<argc;i++){
+           std::string filename = argv[i];
+           add(filename);
+        }
     }
+
     else if (command == "commit") {
         std::string message;
         if (argc > 3 && std::string(argv[2]) == "-m") {
@@ -58,35 +62,21 @@ int main(int argc, char* argv[]) {
         }
         commit(message);
     }
+
     else if (command == "log") {
         log();
     }
 
-    else if (command == "restore"){
-        if (argc < 3) {
-            std::cout << "----------------------------------------" << std::endl;
-            std::cout << "Please enter a correct filename." << std::endl;
-            std::cout << "----------------------------------------" << std::endl;
-            return 1;
-        }
-        std::string filename = argv[2];
-        restore_file(filename);
-    }
-
-    else if(command == "branch"){
-        if (argc < 3) {
-            std::cout << "----------------------------------------" << std::endl;
-            std::cout << "Please enter a correct commands." << std::endl;
-            std::cout << "----------------------------------------" << std::endl;
-            return 1;
-            }
-        std::string command = argv[2];
- 
-        std::string branch_name = argv[3];
-
-        handle_branch_command( command, branch_name);
-
-    }
+    // else if (command == "restore"){
+    //     if (argc < 3) {
+    //         std::cout << "----------------------------------------" << std::endl;
+    //         std::cout << "Please enter a correct filename." << std::endl;
+    //         std::cout << "----------------------------------------" << std::endl;
+    //         return 1;
+    //     }
+    //     std::string filename = argv[2];
+    //     restore_file(filename);
+    // }
 
 
     else {
