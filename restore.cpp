@@ -1,131 +1,164 @@
 #include <iostream>
-#include <filesystem>
-#include <vector>
-#include <string>
 #include <fstream>
-#include <sstream>
-#include <unordered_map>
+#include <string>
+#include <vector>
+#include <regex>
+#include <filesystem>
 
-const std::string COMMITS_DIR = ".vcs/commits";
-const std::string BLOBS_DIR = ".vcs/blobs";
-const std::string TREES_DIR = ".vcs/trees";
-
-// Function to list all versions of a specific file
-std::unordered_map<std::string, std::string> list_file_versions(const std::string& filename) {
-    std::unordered_map<std::string, std::string> versions; // maps commit hash to blob hash
-    std::ifstream metadata_file(COMMITS_DIR + "/metadata.txt");
-
-    // Check if the metadata file opened successfully
-    if (!metadata_file) {
-        std::cerr << "Error: Unable to open metadata file." << std::endl;
-        return versions; // Return empty map on error
+// Function to apply reverse changes from a delta file
+void applyReverseDelta(const std::string &deltaFile, std::vector<std::string> &lines) {
+    std::ifstream delta(deltaFile);
+    if (!delta.is_open()) {
+        std::cerr << "Failed to open " << deltaFile << std::endl;
+        return;
     }
 
     std::string line;
-    while (std::getline(metadata_file, line)) {
-        std::istringstream iss(line);
-        std::string commit_hash, tree_hash, message;
+    std::regex modifiedLineRegex(R"(Modified Lines:)");
+    std::regex modifiedRegex("Line (\\d+): from \"(.*)\" to \"(.*)\"");
+    std::regex deletedLineRegex(R"(Deleted Lines:)");
+    std::regex deletedRegex(R"(Line (\d+): (.*))");
+    std::regex addedLineRegex(R"(Added Lines:)");
+    std::regex addedRegex(R"(Line (\d+): (.*))");
 
-        // Extract commit hash and tree hash from the metadata
-        iss >> commit_hash; // Read the commit hash
-        iss >> message;     // Skip '-'
-        iss >> message;     // Skip 'Tree:'
-        iss >> tree_hash;   // Read the tree hash
+    // Process the delta file
+    while (getline(delta, line)) {
+        std::smatch match;
 
-        // Construct the path to the tree file
-        std::string tree_file_path = TREES_DIR + "/" + tree_hash;
-        std::ifstream tree_file(tree_file_path);
+        if (std::regex_match(line, modifiedLineRegex)) {
+            // Process Modified lines
+            while (getline(delta, line) && std::regex_match(line, match, modifiedRegex)) {
+                auto lineNum = static_cast<std::vector<std::string>::size_type>(std::stoi(match[1]) - 1); // 0-based index
+                std::string fromText = match[2];
+                std::string toText = match[3];
 
-        // Check if the tree file opened successfully
-        if (!tree_file) {
-            std::cerr << "Error: Unable to open tree file: " << tree_file_path << std::endl;
-            continue; // Skip this commit if the tree file is not accessible
-        }
-
-        std::string tree_line;
-        // Read the tree file line by line
-        while (std::getline(tree_file, tree_line)) {
-            std::istringstream tree_iss(tree_line);
-            std::string blob_hash;
-
-            // Read the blob hash from the tree file
-            tree_iss >> blob_hash;
-
-            // Now go to the corresponding blob file using the blob hash
-            std::ifstream blob_file(BLOBS_DIR + "/" + blob_hash);
-            if (!blob_file) {
-                std::cerr << "Error: Unable to open blob file: " << BLOBS_DIR + "/" + blob_hash << std::endl;
-                continue;
-            }
-
-            std::string blob_line;
-            std::string blob_filename;
-            
-            // Read the blob file to extract the filename
-            if (std::getline(blob_file, blob_line)) {
-                std::istringstream blob_iss(blob_line);
-                std::string actual_blob_hash;
-                blob_iss >> actual_blob_hash;  // Extract the actual blob hash
-                blob_filename = blob_line.substr(actual_blob_hash.size() + 1);  // Extract the filename
-                
-                // If the file name matches the filename we're looking for
-                if (blob_filename == filename) {
-                    // Store the commit hash and blob hash
-                    versions[commit_hash] = actual_blob_hash; // Correctly store the actual blob hash
-                    break; // No need to continue once we find the matching file
+                // Reverse: change `to` text back to `from` text
+                if (lineNum < lines.size() && lines[lineNum] == toText) {
+                    std::cout << "Restoring modified line: " << lineNum + 1 << " from \"" << toText << "\" to \"" << fromText << "\"\n";
+                    lines[lineNum] = fromText; // Restore modified line
+                } else {
+                    std::cout << "Skipping modified line at " << lineNum + 1 << ": Current content does not match expected 'to' text.\n";
                 }
             }
-            blob_file.close();
+        } else if (std::regex_match(line, deletedLineRegex)) {
+            // Process Deleted lines
+            std::vector<std::pair<int, std::string>> toInsert;
+            while (getline(delta, line) && std::regex_match(line, match, deletedRegex)) {
+                int lineNum = std::stoi(match[1]) - 1; // 0-based index
+                std::string deletedText = match[2];
+                toInsert.push_back({lineNum, deletedText});
+            }
+            // Insert deleted lines in reverse order to maintain correct indexing
+            for (auto it = toInsert.rbegin(); it != toInsert.rend(); ++it) {
+                auto lineNum = static_cast<std::vector<std::string>::size_type>(it->first);
+                std::cout << "Restoring deleted line: " << lineNum + 1 << " with text \"" << it->second << "\"\n";
+                if (lineNum <= lines.size()) {
+                    lines.insert(lines.begin() + lineNum, it->second); // Insert at the correct position
+                }
+            }
+        } else if (std::regex_match(line, addedLineRegex)) {
+            // Process Added lines
+            std::vector<int> toErase;
+            while (getline(delta, line) && std::regex_match(line, match, addedRegex)) {
+                int lineNum = std::stoi(match[1]) - 1; // 0-based index
+                toErase.push_back(lineNum);
+            }
+            // Erase added lines in reverse order to maintain correct indexing
+            for (auto it = toErase.rbegin(); it != toErase.rend(); ++it) {
+                auto lineNum = static_cast<std::vector<std::string>::size_type>(*it);
+                if (lineNum < lines.size()) {
+                    std::cout << "Removing added line at: " << lineNum + 1 << "\n";
+                    lines.erase(lines.begin() + lineNum); // Remove added lines
+                }
+            }
         }
-        tree_file.close();
     }
-
-    return versions; // Return the map of versions
+    delta.close();
 }
 
-// Function to restore a file from a specific version
-void restore_file_version(const std::string& blob_hash, const std::string& filename) {
-    // Open the blob file that contains the file content
-    std::ifstream blob_file(BLOBS_DIR + "/" + blob_hash, std::ios::binary);
-    if (!blob_file) {
-        std::cerr << "Error: Unable to open blob file for hash: " << blob_hash << std::endl;
+// Function to restore a file to a specified version
+void restoreToVersion(const std::string &fileName, int targetVersion) {
+    std::vector<std::string> lines;
+    std::ifstream currentFile(".vcs/delta/" + fileName + "/prev_version.txt");
+    if (!currentFile.is_open()) {
+        std::cerr << "Failed to open the current version file." << std::endl;
         return;
     }
 
-    // Restore the file content
-    std::ofstream output_file(filename, std::ios::binary);
-    output_file << blob_file.rdbuf(); // Write the content of the blob to the file
-
-    std::cout << "Restored " << filename << " to version with blob hash " << blob_hash << "." << std::endl;
-
-    blob_file.close();
-    output_file.close();
-}
-
-// Function to prompt the user to restore a specific file version
-void restore_file(const std::string& filename) {
-    auto versions = list_file_versions(filename);
-
-    if (versions.empty()) {
-        std::cerr << "No versions found for " << filename << "!" << std::endl;
-        return;
+    std::string line;
+    while (getline(currentFile, line)) {
+        lines.push_back(line);
     }
+    currentFile.close();
 
-    // List all versions of the file
-    std::cout << "Available versions for " << filename << ":" << std::endl;
-    for (const auto& [commit_hash, blob_hash] : versions) {
-        std::cout << "- Commit Hash: " << commit_hash << ", Blob Hash: " << blob_hash << std::endl;
-    }
-
-    // Ask user for which version to restore
-    std::cout << "Enter the commit hash to restore: ";
-    std::string selected_commit_hash;
-    std::cin >> selected_commit_hash;
-
-    // Restore the selected version
-    if (versions.find(selected_commit_hash) != versions.end()) {
-        restore_file_version(versions[selected_commit_hash], filename); // Use the blob hash associated with the commit hash
+    // Read the current version from versions.txt
+    int currentVersion;
+    std::ifstream versionFile(".vcs/delta/" + fileName + "/versions.txt");
+    if (versionFile.is_open()) {
+        std::string versionText;
+        getline(versionFile, versionText);
+        if (std::sscanf(versionText.c_str(), "NUMBER OF VERSIONS :- %d", &currentVersion) != 1) {
+            std::cerr << "Error parsing number of versions." << std::endl;
+            return;
+        }
+        versionFile.close();
     } else {
-        std::cerr << "Error: Invalid commit hash selected." << std::endl;
+        std::cerr << "Failed to open versions.txt" << std::endl;
+        return;
     }
+
+    for (int i = currentVersion; i > targetVersion; --i) {
+        std::string deltaFile = ".vcs/delta/" + fileName + "/delta_" + std::to_string(i - 1) + ".txt";
+
+        if (std::filesystem::exists(deltaFile)) {
+            applyReverseDelta(deltaFile, lines);
+        } else {
+            std::cerr << "Delta file " << deltaFile << " does not exist. Skipping." << std::endl;
+        }
+    }
+
+    std::ofstream restoredFile(fileName);
+    if (!restoredFile.is_open()) {
+        std::cerr << "Failed to open the file for restoring." << std::endl;
+        return;
+    }
+    for (const std::string &restoredLine : lines) {
+        restoredFile << restoredLine << "\n";
+    }
+    restoredFile.close();
+
+    std::cout << "File restored to version " << targetVersion << ".\n";
+}
+
+void restore() {
+    std::string fileName;
+    int targetVersion;
+
+    std::cout << "Enter the name of the file to restore: ";
+    std::cin >> fileName;
+
+    int numVersions;
+    std::ifstream versionFile(".vcs/delta/" + fileName + "/versions.txt");
+    if (versionFile.is_open()) {
+        std::string versionText;
+        getline(versionFile, versionText);
+        if (std::sscanf(versionText.c_str(), "NUMBER OF VERSIONS :- %d", &numVersions) != 1) {
+            std::cerr << "Error parsing number of versions." << std::endl;
+            return;
+        }
+        versionFile.close();
+    } else {
+        std::cerr << "Failed to open versions.txt" << std::endl;
+        return;
+    }
+
+    std::cout << "The file has " << numVersions << " versions available.\n";
+    std::cout << "Which version would you like to restore to? ";
+    std::cin >> targetVersion;
+    if (targetVersion <= 0 || targetVersion > numVersions) {
+        std::cerr << "Invalid version number.\n";
+        return;
+    }
+
+    restoreToVersion(fileName, targetVersion);
 }
