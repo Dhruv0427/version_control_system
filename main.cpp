@@ -3,19 +3,18 @@
 #include <filesystem>
 #include "my_vcs.h"
 
-const std::string VCS_DIR = ".vcs"; // Define the VCS directory to check if initialized
+const std::string VCS_DIR = ".vcs";
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
         std::cout << "----------------------------------------" << std::endl;
         std::cout << "No command provided. Start program by using the 'init' command." << std::endl;
         std::cout << "----------------------------------------" << std::endl;
-        return 1; // Exit the program
+        return 1;
     }
 
     std::string command = argv[1];
 
-    // Always allow the 'init' command to proceed
     if (command == "init") {
         std::cout << "---------------------------------------------------------------------" << std::endl;
         std::cout << "                Initializing version control system ...               " << std::endl;
@@ -24,7 +23,6 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    // For any other command, check if the VCS has been initialized
     if (!std::filesystem::exists(VCS_DIR)) {
         std::cout << "----------------------------------------" << std::endl;
         std::cout << "Error: Version control system not initialized." << std::endl;
@@ -33,7 +31,6 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Now check for other commands after initialization has been verified
     if (command == "add") {
         if (argc < 3) {
             std::cout << "----------------------------------------" << std::endl;
@@ -42,18 +39,18 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        for(int i=2;i<argc;i++){
-           std::string filename = argv[i];
-           add(filename);
+        for (int i = 2; i < argc; i++) {
+            std::string filename = argv[i];
+            add(filename);
         }
     }
 
     else if (command == "commit") {
         std::string message;
         if (argc > 3 && std::string(argv[2]) == "-m") {
-            message = argv[3]; // Take the message from the command-line argument
+            message = argv[3];
         } else if (argc == 2 && std::string(argv[1]) == "commit") {
-            message = ""; // No message provided
+            message = "";
         } else {
             std::cout << "----------------------------------------" << std::endl;
             std::cout << "Usage: ./myvcs commit [-m \"commit message\"]" << std::endl;
@@ -67,11 +64,9 @@ int main(int argc, char* argv[]) {
         log();
     }
 
-    else if (command == "restore"){
-
+    else if (command == "restore") {
         restore();
     }
-
 
     else {
         std::cout << "----------------------------------------" << std::endl;
