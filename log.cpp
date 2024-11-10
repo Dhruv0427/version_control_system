@@ -21,4 +21,3 @@ void log() {
 
     metadata.close();
 }
-
