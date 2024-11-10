@@ -20,4 +20,7 @@ void storeDelta(const std::string& currentFile,
 void displayDelta(const std::string &deltaFile);
 std::string getNextDeltaFileName(const std::string &fileName);
 void commit(std::string message);
+void updateVersionCount(const std::string &fileName) ;
+void restore();
+
 #endif // MY_VCS_H
