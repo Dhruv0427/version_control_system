@@ -4,6 +4,7 @@
 #include <vector>
 #include <regex>
 #include <filesystem>
+#include "my_vcs.h"
 
 // Function to apply reverse changes from a delta file
 void applyReverseDelta(const std::string &deltaFile, std::vector<std::string> &lines) {
