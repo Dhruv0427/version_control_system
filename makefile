@@ -11,7 +11,7 @@ LDFLAGS = -lssl -lcrypto
 TARGET = myvcs
 
 # Source files
-SRCS = main.cpp add.cpp init.cpp commit.cpp diff.cpp delta.cpp log.cpp
+SRCS = main.cpp add.cpp init.cpp commit.cpp diff.cpp delta.cpp log.cpp restore.cpp
 
 # Object files
 OBJS = $(SRCS:.cpp=.o)
